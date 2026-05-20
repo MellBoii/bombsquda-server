@@ -11,6 +11,10 @@ from flask import (
     url_for,
     session
 )
+from werkzeug.security import (
+    generate_password_hash, 
+    check_password_hash
+)
 import json
 import os, sys
 import time, datetime
@@ -104,15 +108,21 @@ def load_runtime():
     if not os.path.exists(RUNTIME_FILE):
         return {}
 
-    with open(RUNTIME_FILE, "r", encoding="utf-8") as f:
-        try:
+    try:
+        with open(RUNTIME_FILE, "r", encoding="utf-8") as f:
             return json.load(f)
-        except json.JSONDecodeError:
-            return {}
 
+    except json.JSONDecodeError as exc:
+        print(f"ERROR: Your runtime.json is malformed.\n{exc}")
+        raise
+        
 def save_runtime(data):
-    with open(RUNTIME_FILE, "w", encoding="utf-8") as f:
+    temp = RUNTIME_FILE + ".tmp"
+
+    with open(temp, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
+
+    os.replace(temp, RUNTIME_FILE)
 
 @app.route("/about")
 def about():
@@ -140,10 +150,12 @@ def login():
             error = "Password is required."
 
         info = runtime.get('user_info', {})
+        runtime.setdefault('passwords', {})
+        passwords = runtime.get('passwords')
         for sqid in list( info.keys() ):
             # get user
             if resolve_user_id(sqid):
-                correct_pass = info[sqid].get('password')
+                correct_pass = passwords.get(sqid)
                 correct_user = sqid
                 break
             else:
@@ -153,10 +165,10 @@ def login():
         # but no password,
         # make it our new one
         if correct_user and not correct_pass:
-            runtime.get(correct_user)['password'] = password
+            passwords[sqid] = generate_password_hash(password)
             save_runtime(runtime)
                 
-        if not correct_user or password != correct_pass:
+        if not correct_user or not check_password_hash(correct_pass, password):
             error = "Invalid username or password."
         else:
             session['squda_id'] = correct_user
@@ -194,8 +206,8 @@ def ping():
     runtime = load_runtime()
     reply = {"ok": True}
     runtime.setdefault('user_info', {})
-    bs_id = data["bs_id"]
-    info = runtime['user_info']
+    bs_id = data.get("bs_id")
+    info = runtime.get('user_info')
     if bs_id not in info.keys():
         acc_name = data.get("account", None)
         info[bs_id] = {
@@ -214,7 +226,7 @@ def ping():
     cleanup_offline_clients(runtime)
     save_runtime(runtime)
 
-    return reply
+    return jsonify(reply)
 
 @app.route("/sendcur", methods=["POST"])
 def sendcur():
@@ -393,8 +405,6 @@ def get_friend_messages():
 
     user1 = resolve_user_id(data.get("user", ""))
     user2 = resolve_user_id(data.get("with", ""))
-    print(user1)
-    print(user2)
 
     if not user1 or not user2:
         return jsonify({"error": "invalid_user"})
@@ -424,29 +434,14 @@ def get_friends():
         "requests": runtime.get("friend_requests", {}).get(user, [])
     })
 
-
-@app.route("/api/get_name_from_id", methods=["POST"])
-def get_name():
+@app.route("/api/get_info", methods=["POST"])
+def get_info():
     data = request.get_json(silent=True) or {}
     id = data.get('id')
     runtime = load_runtime()
     info = runtime.get("user_info", {})
     thisinfo = info.get(id)
-    name = thisinfo.get('username')
-    if not name:
-        name = thisinfo.get('account_name', '')
-    return name
-
-@app.route("/send_command", methods=["POST"])
-def send_command():
-    data = request.json
-    bs_id = data["bs_id"]
-
-    runtime = load_runtime()
-    runtime["commands"].setdefault(bs_id, []).append(data)
-    save_runtime(runtime)
-
-    return {"queued": True}
+    return jsonify(thisinfo)
 
 @app.route("/submit", methods=["POST"])
 def submit():
@@ -466,7 +461,6 @@ def submit():
         data[level][player] = time
 
     save_data(data)
-    print(f'{player} submitted time {time} for {level}')
     return jsonify({"status": "ok"})
 
 @app.route("/get/<level>")
