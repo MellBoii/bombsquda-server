@@ -166,6 +166,7 @@ def login():
         # make it our new one
         if correct_user and not correct_pass:
             passwords[sqid] = generate_password_hash(password)
+            correct_pass = passwords.get(sqid)
             save_runtime(runtime)
                 
         if not correct_user or not check_password_hash(correct_pass, password):
@@ -191,7 +192,10 @@ def acc_settings():
     # ew
     runtime_info = runtime.get('user_info', {})
     user_info = runtime_info.get(squda_id, {})
-    username = user_info.get('username')
+    username = user_info.get(
+        'username', 
+        user_info.get('account_name')
+    )
     if not username:
         username = squda_id
     
