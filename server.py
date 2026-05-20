@@ -13,7 +13,7 @@ from flask import (
 )
 import json
 import os, sys
-import time
+import time, datetime
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -24,6 +24,38 @@ DATA_FILE = "leaderboard.json"
 port = int(os.environ.get("PORT", 5000))
 ONLINE_TIMEOUT = 10
 RUNTIME_FILE = "runtime.json"
+
+def resolve_user_id(name: str) -> str | None:
+    """Resolve a username/account name/ID into a Squda ID."""
+    
+    runtime = load_runtime()
+    info = runtime.get("user_info", {})
+
+    name = clean_display_name(name)
+
+    # Direct ID match
+    if name in info:
+        return name
+
+    # Username/account name lookup
+    for sqid, user_info in info.items():
+        username = user_info.get("username")
+        account_name = user_info.get("account_name")
+
+        if username and username.upper() == name.upper():
+            return sqid
+
+        if account_name and account_name.upper() == name.upper():
+            return sqid
+
+    return None
+
+
+def are_friends(runtime: dict, user1: str, user2: str) -> bool:
+    """Check if two users are friends."""
+    
+    return user2 in runtime.get("friends", {}).get(user1, [])
+
 def load_data():
     if not os.path.exists(DATA_FILE):
         return {}
@@ -109,13 +141,8 @@ def login():
 
         info = runtime.get('user_info', {})
         for sqid in list( info.keys() ):
-            # get user by ID
-            if username == sqid:
-                correct_pass = info[sqid].get('password')
-                correct_user = sqid
-                break
-            # otherwise try getting by username
-            elif username == info[sqid]['username']:
+            # get user
+            if resolve_user_id(sqid):
                 correct_pass = info[sqid].get('password')
                 correct_user = sqid
                 break
@@ -165,12 +192,14 @@ def acc_settings():
 def ping():
     data = request.json
     runtime = load_runtime()
+    reply = {"ok": True}
     runtime.setdefault('user_info', {})
     bs_id = data["bs_id"]
     info = runtime['user_info']
     if bs_id not in info.keys():
+        acc_name = data.get("account", None)
         info[bs_id] = {
-            "account_name": clean_display_name(data.get("account", None)),
+            "account_name": clean_display_name(acc_name),
         }
         
     runtime.setdefault("online_clients", {})
@@ -185,7 +214,7 @@ def ping():
     cleanup_offline_clients(runtime)
     save_runtime(runtime)
 
-    return {"ok": True}
+    return reply
 
 @app.route("/sendcur", methods=["POST"])
 def sendcur():
@@ -244,80 +273,169 @@ def getcur():
 
 @app.route("/friends/request", methods=["POST"])
 def send_friend_request():
-    runtime = load_runtime()
     data = request.get_json(silent=True) or {}
-    sender = clean_display_name(data.get("from", ""))
-    target = clean_display_name(data.get("to", ""))
-    info = runtime.get('user_info')
-    for sqid in list( info.keys() ):
-        thisinfo = info.get('sqid')
-        username = thisinfo.get('username')
-        if not username:
-            username thisinfo.get('account_name')
-        if username.upper() == target.upper():
-            target = sqid
 
-    if not sender or not target or sender == target:
-        return jsonify({"error": "invalid"}), 400
+    sender = resolve_user_id(data.get("from", ""))
+    target = resolve_user_id(data.get("to", ""))
+
+    if not sender or not target:
+        return jsonify({"error": "invalid_user"})
+
+    if sender == target:
+        return jsonify({"error": "cannot_friend_self"})
 
     runtime = load_runtime()
+
     runtime.setdefault("friend_requests", {})
     runtime.setdefault("friends", {})
 
-    # Already friends?
-    if target in runtime["friends"].get(sender, []):
+    # Already friends
+    if are_friends(runtime, sender, target):
         return jsonify({"status": "already_friends"})
 
-    runtime["friend_requests"].setdefault(target, [])
-    if sender not in runtime["friend_requests"][target]:
-        runtime["friend_requests"][target].append(sender)
+    # Create request list
+    requests = runtime["friend_requests"].setdefault(target, [])
+
+    # Avoid duplicates
+    if sender not in requests:
+        requests.append(sender)
 
     save_runtime(runtime)
+
     return jsonify({"status": "sent"})
 
 @app.route("/friends/respond", methods=["POST"])
 def respond_friend_request():
     data = request.get_json(silent=True) or {}
-    user = clean_display_name(data.get("user", ""))
-    sender = clean_display_name(data.get("from", ""))
+
+    user = resolve_user_id(data.get("user", ""))
+    sender = resolve_user_id(data.get("from", ""))
     accept = bool(data.get("accept", False))
-    info = runtime.get('user_info')
-    for sqid in list( info.keys() ):
-        thisinfo = info.get('sqid')
-        username = thisinfo.get('username')
-        if not username:
-            username thisinfo.get('account_name')
-        if username.upper() == target.upper():
-            sender = sqid
+
+    if not user or not sender:
+        return jsonify({"error": "invalid_user"})
 
     runtime = load_runtime()
+
     requests = runtime.setdefault("friend_requests", {})
     friends = runtime.setdefault("friends", {})
 
-    if sender not in requests.get(user, []):
-        return jsonify({"error": "no_request"}), 400
+    user_requests = requests.get(user, [])
 
-    requests[user].remove(sender)
-    if not requests[user]:
-        del requests[user]
+    if sender not in user_requests:
+        return jsonify({"error": "no_request"})
 
+    # Remove request
+    user_requests.remove(sender)
+
+    if not user_requests:
+        requests.pop(user, None)
+
+    # Accept request
     if accept:
-        friends.setdefault(user, []).append(sender)
-        friends.setdefault(sender, []).append(user)
+        friends.setdefault(user, [])
+        friends.setdefault(sender, [])
+
+        if sender not in friends[user]:
+            friends[user].append(sender)
+
+        if user not in friends[sender]:
+            friends[sender].append(user)
 
     save_runtime(runtime)
-    return jsonify({"status": "ok"})
+
+    return jsonify({
+        "status": "accepted" if accept else "declined"
+    })
+
+
+@app.route("/friends/message", methods=["POST"])
+def send_friend_message():
+    data = request.get_json(silent=True) or {}
+
+    sender = resolve_user_id(data.get("from", ""))
+    target = resolve_user_id(data.get("to", ""))
+    message = str(data.get("message", "")).strip()
+
+    if not sender or not target:
+        return jsonify({"error": "invalid_user"})
+
+    if not message:
+        return jsonify({"error": "empty_message"})
+
+    runtime = load_runtime()
+
+    # Must be friends
+    if not are_friends(runtime, sender, target):
+        return jsonify({"error": "not_friends"})
+
+    runtime.setdefault("friend_messages", {})
+
+    convo_id = "_".join(sorted([sender, target]))
+
+    runtime["friend_messages"].setdefault(convo_id, [])
+    thistime = datetime.datetime.now()
+    thistime = thistime.strftime("%H:%M:%S")
+    runtime["friend_messages"][convo_id].append({
+        "from": sender,
+        "message": message,
+        "time": thistime,
+        'seen': False,
+    })
+
+    save_runtime(runtime)
+
+    return jsonify({"status": "sent"})
+
+@app.route("/friends/messages", methods=["POST"])
+def get_friend_messages():
+    data = request.get_json(silent=True) or {}
+
+    user1 = resolve_user_id(data.get("user", ""))
+    user2 = resolve_user_id(data.get("with", ""))
+    print(user1)
+    print(user2)
+
+    if not user1 or not user2:
+        return jsonify({"error": "invalid_user"})
+
+    runtime = load_runtime()
+
+    convo_id = "_".join(sorted([user1, user2]))
+
+    return jsonify({
+        "messages": runtime.get("friend_messages", {}).get(convo_id, [])
+    })
+    
 
 @app.route("/friends/list", methods=["POST"])
 def get_friends():
     data = request.get_json(silent=True) or {}
-    user = clean_display_name(data.get("user", ""))
+
+    user = resolve_user_id(data.get("user", ""))
+
+    if not user:
+        return jsonify({"error": "invalid_user"})
 
     runtime = load_runtime()
+
     return jsonify({
         "friends": runtime.get("friends", {}).get(user, []),
         "requests": runtime.get("friend_requests", {}).get(user, [])
     })
+
+
+@app.route("/api/get_name_from_id", methods=["POST"])
+def get_name():
+    data = request.get_json(silent=True) or {}
+    id = data.get('id')
+    runtime = load_runtime()
+    info = runtime.get("user_info", {})
+    thisinfo = info.get(id)
+    name = thisinfo.get('username')
+    if not name:
+        name = thisinfo.get('account_name', '')
+    return name
 
 @app.route("/send_command", methods=["POST"])
 def send_command():
