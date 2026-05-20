@@ -31,6 +31,7 @@
 		  text-decoration: none; /* optional: removes underline */
 		}
 
+
 		/* visited link */
 		.a2:visited {
 		  color: white;
@@ -78,23 +79,139 @@
             height: 100%;
             object-fit: cover;
         }
-        .myButton {
-            background-color: #18d641; 
-            border: none;
-            color: #ffffff;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 20px;
-            font-family: 'bombsquad', sans-serif;
-            cursor: pointer;
-            border-radius: 8px;
-            transition: transform 0.1s ease-in-out;
-        }
-        .myButton:hover {
-            transform: scale(1.1);
-        }
+		.myButton {
+			position: relative;
+			overflow: hidden;
+
+			background: linear-gradient(
+				135deg,
+				#1ee84f,
+				#18d641 45%,
+				#11b835
+			);
+
+			border: none;
+			color: #ffffff;
+
+			padding: 15px 32px;
+
+			text-align: center;
+			text-decoration: none;
+			display: inline-block;
+
+			font-size: 20px;
+			font-family: 'bombsquad', sans-serif;
+
+			cursor: pointer;
+			border-radius: 12px;
+
+			/* transitions */
+			transition:
+				transform 0.22s cubic-bezier(.22, 1, .36, 1),
+				box-shadow 0.25s ease,
+				filter 0.25s ease,
+				background 0.3s ease;
+
+			/* */
+			box-shadow:
+				0 4px 12px rgba(0, 0, 0, 0.25),
+				inset 0 1px 1px rgba(255,255,255,0.15);
+		}
+
+		/* blur the glow */
+		.myButton::before {
+			content: "";
+			position: absolute;
+			inset: -30%;
+
+			background: linear-gradient(
+				90deg,
+				rgba(255, 0, 80, 0.9),
+				rgba(255, 140, 0, 0.9),
+				rgba(255, 230, 0, 0.9),
+				rgba(0, 255, 120, 0.9),
+				rgba(0, 170, 255, 0.9),
+				rgba(130, 80, 255, 0.9),
+				rgba(255, 0, 180, 0.9),
+				rgba(255, 0, 80, 0.9)
+			);
+
+			background-size: 300% 300%;
+
+			filter: blur(34px);
+			opacity: 0;
+
+			transition:
+				opacity 0.35s ease,
+				transform 0.35s ease;
+
+			z-index: 0;
+		}
+
+		.myButton:hover {
+			transform: scale(1.08) translateY(-2px);
+
+			/* make a gradient */
+			background: linear-gradient(
+				135deg,
+				#ff4d6d,
+				#ff9f1c,
+				#ffe66d,
+				#2ceaa3,
+				#54a0ff,
+				#9b5cff,
+				#ff4d6d
+			);
+
+			background-size: 300% 300%;
+
+			animation: rainbow-flow 5s ease infinite;
+
+			box-shadow:
+				0 10px 28px rgba(0,0,0,0.35),
+				0 0 24px rgba(255,255,255,0.15);
+		}
+
+		.myButton:hover::before {
+			opacity: 0.9;
+			transform: scale(1.05);
+
+			animation: rainbow-flow 6s linear infinite;
+		}
+
+		.myButton:active {
+			transform: scale(0.97);
+			transition-duration: 0.08s;
+		}
+		
+		/* using span keeps the text from coloring too */
+		.myButton span {
+			position: relative;
+			z-index: 1;
+			color: white;
+		}
+
+		@keyframes rainbow-flow {
+			0% {
+				background-position: 0% 0%;
+			}
+			
+			20% {
+				background-position: 30% 50%;
+			}
+
+			50% {
+				background-position: 100% 0%;
+			}
+			
+			70% {
+				background-position: 30% 100%;
+			}
+
+			100% {
+				background-position: 0% 0%;
+			}
+		}
 		.myButton:active {
             transform: scale(1.3);
         }
@@ -119,18 +236,13 @@
 				that make the gameplay different, a whole upcoming co-op campaign story,
 				sounds that are sure to destroy your ears, and Mell!
             </h3>
-			<h3>All</h3>
-			<h3>within</h3>
-			<h2>A</h2>
-			<h2>SINGLE</h2>
-			<h1>PACK!</h1>
 			<h2>
 				So why not download it? Click the button below! 
 				It's pretty good, I promise!
             </h2>
             <a href="https://github.com/MellBoii1/bombsquda/archive/refs/heads/main.zip">
             <button type="button" class="myButton">
-                download it!
+                <span>download it!</span>
             </button></a>
             <h2>Screenshots</h2>
             <img src="static/screenshot1.png" alt="Screenshot">
