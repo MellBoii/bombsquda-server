@@ -107,7 +107,7 @@ def login():
         elif password == "":
             error = "Password is required."
 
-        info = runtime.get('user_info')
+        info = runtime.get('user_info', {})
         for sqid in list( info.keys() ):
             # get user by ID
             if username == sqid:
@@ -150,7 +150,7 @@ def acc_settings():
     runtime = load_runtime()
     squda_id = session.get('squda_id')
     # ew
-    runtime_info = runtime.get('user_info')
+    runtime_info = runtime.get('user_info', {})
     user_info = runtime_info.get(squda_id, {})
     username = user_info.get('username')
     if not username:
@@ -164,9 +164,15 @@ def acc_settings():
 @app.route("/ping", methods=["POST"])
 def ping():
     data = request.json
-    bs_id = data["bs_id"]
-
     runtime = load_runtime()
+    runtime.setdefault('user_info', {})
+    bs_id = data["bs_id"]
+    info = runtime['user_info']
+    if bs_id not in info.keys():
+        info[bs_id] = {
+            "account_name": clean_display_name(data.get("account", None)),
+        }
+        
     runtime.setdefault("online_clients", {})
     runtime["online_clients"][bs_id] = {
         "last_seen": time.time(),
@@ -238,9 +244,18 @@ def getcur():
 
 @app.route("/friends/request", methods=["POST"])
 def send_friend_request():
+    runtime = load_runtime()
     data = request.get_json(silent=True) or {}
     sender = clean_display_name(data.get("from", ""))
     target = clean_display_name(data.get("to", ""))
+    info = runtime.get('user_info')
+    for sqid in list( info.keys() ):
+        thisinfo = info.get('sqid')
+        username = thisinfo.get('username')
+        if not username:
+            username thisinfo.get('account_name')
+        if username.upper() == target.upper():
+            target = sqid
 
     if not sender or not target or sender == target:
         return jsonify({"error": "invalid"}), 400
@@ -266,6 +281,14 @@ def respond_friend_request():
     user = clean_display_name(data.get("user", ""))
     sender = clean_display_name(data.get("from", ""))
     accept = bool(data.get("accept", False))
+    info = runtime.get('user_info')
+    for sqid in list( info.keys() ):
+        thisinfo = info.get('sqid')
+        username = thisinfo.get('username')
+        if not username:
+            username thisinfo.get('account_name')
+        if username.upper() == target.upper():
+            sender = sqid
 
     runtime = load_runtime()
     requests = runtime.setdefault("friend_requests", {})
