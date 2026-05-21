@@ -228,8 +228,25 @@ def ping():
         "squda_updatedate": data.get("squda_updatedate", '00/00/2000'),
     }
     cleanup_offline_clients(runtime)
-    save_runtime(runtime)
+    
+    acc_name = data.get("account", None)
+    user1 = resolve_user_id(acc_name)
 
+    chosenconvos = []
+    convos = runtime.get("friend_messages", {})
+    for convo in convos.keys():
+        if user1 in convo:
+            chosenconvos.append(convos[convo])
+    for convos in chosenconvos:
+        for message in convos:
+            if not message.get('seen', False) and message.get('from') != user1:
+                new_msgs = reply.setdefault('new_messages', {})
+                user = message.get('from')
+                content = message.get('message')
+                new_msgs[user] = content
+                message['seen'] = True
+            
+    save_runtime(runtime)
     return jsonify(reply)
 
 @app.route("/sendcur", methods=["POST"])
@@ -347,6 +364,12 @@ def remove_friend():
     # Avoid duplicates
     if target in friends:
         friends.remove(target)
+    
+    friends = runtime.get('friends', {}).get(target)
+    
+    # Avoid duplicates
+    if user in friends:
+        friends.remove(user)
 
     save_runtime(runtime)
 
@@ -452,7 +475,26 @@ def get_friend_messages():
     return jsonify({
         "messages": runtime.get("friend_messages", {}).get(convo_id, [])
     })
-    
+
+@app.route("/friends/set_all_seen", methods=["POST"])
+def set_seen():
+    data = request.get_json(silent=True) or {}
+
+    user1 = resolve_user_id(data.get("user", ""))
+    user2 = resolve_user_id(data.get("with", ""))
+
+    if not user1 or not user2:
+        return jsonify({"error": "invalid_user"})
+
+    runtime = load_runtime()
+
+    convo_id = "_".join(sorted([user1, user2]))
+    for message in ("friend_messages", {}).get(convo_id, []):
+        if message.get('from') == user2:
+            message['seen'] = True
+    save_runtime()
+
+    return jsonify({'status': 'ok'})
 
 @app.route("/friends/list", methods=["POST"])
 def get_friends():
