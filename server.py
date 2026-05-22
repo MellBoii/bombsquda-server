@@ -212,10 +212,11 @@ def ping():
     runtime.setdefault('user_info', {})
     bs_id = data.get("bs_id")
     info = runtime.get('user_info')
+    acc_name = data.get("account", None)
+    acc_name = clean_display_name(acc_name)
     if bs_id not in info.keys():
-        acc_name = data.get("account", None)
         info[bs_id] = {
-            "account_name": clean_display_name(acc_name),
+            "account_name": acc_name,
         }
         
     runtime.setdefault("online_clients", {})
@@ -227,13 +228,14 @@ def ping():
         "squda_version": data.get("squda_version", 0.0),
         "squda_updatedate": data.get("squda_updatedate", '00/00/2000'),
     }
+    runtime.setdefault("client_statuses", {})
+    runtime["client_statuses"][bs_id] = data.get("squda_status", {})
     cleanup_offline_clients(runtime)
-    
-    acc_name = data.get("account", None)
-    user1 = resolve_user_id(acc_name)
+    save_runtime(runtime)
 
     chosenconvos = []
     convos = runtime.get("friend_messages", {})
+    user1 = resolve_user_id(acc_name)
     for convo in convos.keys():
         if user1 in convo:
             chosenconvos.append(convos[convo])
@@ -489,10 +491,10 @@ def set_seen():
     runtime = load_runtime()
 
     convo_id = "_".join(sorted([user1, user2]))
-    for message in ("friend_messages", {}).get(convo_id, []):
+    for message in runtime.get("friend_messages", {}).get(convo_id, []):
         if message.get('from') == user2:
             message['seen'] = True
-    save_runtime()
+    save_runtime(runtime)
 
     return jsonify({'status': 'ok'})
 
@@ -518,6 +520,15 @@ def get_info():
     id = data.get('id')
     runtime = load_runtime()
     info = runtime.get("user_info", {})
+    thisinfo = info.get(id, {})
+    return jsonify(thisinfo)
+
+@app.route("/api/get_status", methods=["POST"])
+def get_status():
+    data = request.get_json(silent=True) or {}
+    id = data.get('id')
+    runtime = load_runtime()
+    info = runtime.get("client_statuses", {})
     thisinfo = info.get(id, {})
     return jsonify(thisinfo)
 
