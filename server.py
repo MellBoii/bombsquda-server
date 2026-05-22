@@ -460,6 +460,27 @@ def send_friend_message():
 
     return jsonify({"status": "sent"})
 
+@app.route("/api/set_profile_data", methods=["POST"])
+def profile_data():
+    data = request.get_json(silent=True) or {}
+
+    user_id = resolve_user_id(data.get('user'))
+
+    runtime = load_runtime()
+
+    info = runtime.setdefault("user_info", {})
+    thisinfo = info.setdefault(user_id, {})
+
+    for key, value in data.items():
+        if key == 'user':
+            continue
+        thisinfo[key] = value
+
+    save_runtime(runtime)
+
+    return jsonify({"status": "ok"})
+        
+
 @app.route("/friends/messages", methods=["POST"])
 def get_friend_messages():
     data = request.get_json(silent=True) or {}
