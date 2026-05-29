@@ -1,5 +1,5 @@
 # BombSquda Server
-The [Flask](https://flask.palletsprojects.com/en/stable/) server backend for various [BombSquda](https://github.com/MellBoii1/bombsquda) related things
+The [Flask](https://flask.palletsprojects.com/en/stable/) server backend for various [BombSquda](https://github.com/MellBoii1/bombsquda) related things<br>
 As it says on the tin, it's a website/backend so that not only can you learn about
 what BombSquda is, but it can also be used for online functionality!
 (such as syncing spaz tickets and tokens, making purchases with said currency, linking with 
