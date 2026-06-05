@@ -91,7 +91,7 @@ def page_not_found(error):
 def internal_error(error):
     return send_from_directory(".", "internal_error.html"), 500
 
-@app.route("/leaderboard")
+@app.route("/scores_lb")
 def leaderboard():
     return send_from_directory(".", "leaderboard.html")
 
@@ -640,13 +640,11 @@ def get_level(level):
     data = load_data()
     return jsonify(data.get(level, {}))
 
-@app.route("/get/all")
-def get_all():
-    if not os.path.exists(DATA_FILE):
-        return {}
+@app.route("/api/get_scores")
+def get_scores():
+    runtime = load_runtime()
 
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+    return jsonify(runtime.get('scores', {}))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port)

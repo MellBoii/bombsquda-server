@@ -95,56 +95,85 @@
 <body>
 	<h2><a href="/" class="a2"><- Go Back</a></h2>
     <h1>Leaderboard</h1>
-	<h3>A leaderboard for various statistics of players.</h3>
-	<h3>These include things like times in coop levels, and amount of currency.</h3>
-
     <div class="box" id="board">
         Loading...
     </div>
 
 	<script>
-	fetch("/get/all")
-		.then(r => r.json())
-		.then(data => {
-			const board = document.getElementById("board");
-			board.innerHTML = "";
+		fetch("/api/get_scores")
+			.then(r => r.json())
+			.then(data => {
+				const board = document.getElementById("board");
+				board.innerHTML = "";
 
-			for (const level in data) {
-				const h2 = document.createElement("h2");
-				h2.textContent = prettifyLevelName(level);
-				board.appendChild(h2);
+				for (const campaign in data) {
+					const campaignHeader = document.createElement("h1");
+					campaignHeader.textContent = campaign;
+					board.appendChild(campaignHeader);
 
-				const entries = data[level];
+					const levels = data[campaign];
 
-				const sorted = Object.entries(entries)
-					.sort((a, b) => a[1] - b[1]);
+					for (const level in levels) {
+						const levelData = levels[level];
 
-				for (const [player, time] of sorted) {
-					const row = document.createElement("div");
-					row.className = "entry";
+						const h2 = document.createElement("h2");
+						h2.textContent = prettifyLevelName(level);
+						board.appendChild(h2);
 
-					row.innerHTML = `
-						<span>${player}</span>
-						<span class="time">${formatTime(time)}</span>
-					`;
+						for (const playerCount in levelData) {
 
-					board.appendChild(row);
+							if (playerCount === "score_type")
+								continue;
+
+							const h3 = document.createElement("h3");
+							h3.textContent = `${playerCount[0]} Player(s)`;
+							board.appendChild(h3);
+
+							const leaderboard = levelData[playerCount];
+
+							for (const [score, player] of leaderboard) {
+								const row = document.createElement("div");
+								row.className = "entry";
+
+								row.innerHTML = `
+									<span>${player}</span>
+									<span class="score">
+										${formatScore(
+											score,
+											levelData.score_type
+										)}
+									</span>
+								`;
+
+								board.appendChild(row);
+							}
+						}
+					}
 				}
-			}
-		});
+			});
 
-	function formatTime(t) {
-		const m = Math.floor(t / 60);
-		const s = Math.floor(t % 60);
-		const ms = Math.floor((t - Math.floor(t)) * 1000);
-		return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}:${ms.toString().padStart(3, '0')}`;
-	}
-	function prettifyLevelName(raw) {
-    return raw
-        .replace(/^Default:/, "Hard: ") // replace Default with Hard
-        .replace(/^Easy:/, "Easy: ") // replace Easy with... easy i guess
-        .replace(/_squdaPB$/, ""); 
-	}
+		function formatScore(score, scoreType) {
+			if (scoreType === "time") {
+				const m = Math.floor(score / 60);
+				const s = Math.floor(score % 60);
+				const ms = Math.floor(
+					(score - Math.floor(score)) * 1000
+				);
+
+				return `${m.toString().padStart(2, '0')}:${
+					s.toString().padStart(2, '0')
+				}:${ms.toString().padStart(3, '0')}`;
+			}
+
+			return score.toLocaleString();
+		}
+
+		function prettifyLevelName(raw) {
+			return raw
+				.replace(/^Default:/, "Hard: ")
+				.replace(/^Easy:/, "Easy: ")
+				.replace(/_squdaPB$/, "");
+		}
 	</script>
 </body>
 </html>
