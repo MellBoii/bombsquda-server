@@ -476,7 +476,7 @@ def profile_data():
 
     for key, value in data.items():
         if isinstance(value, str):
-            if len(value) > 40:
+            if key in ['username', 'status']:
                 value = value[:40]
         if key == 'user':
             continue
