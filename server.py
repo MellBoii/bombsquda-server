@@ -435,6 +435,9 @@ def send_friend_message():
 
     if not message:
         return jsonify({"error": "empty_message"})
+    
+    if len(message) > 80:
+        message = message[:80]
 
     runtime = load_runtime()
 
@@ -472,6 +475,9 @@ def profile_data():
     thisinfo = info.setdefault(user_id, {})
 
     for key, value in data.items():
+        if isinstance(value, str):
+            if len(value) > 40:
+                value = value[:40]
         if key == 'user':
             continue
         thisinfo[key] = value
