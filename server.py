@@ -479,6 +479,62 @@ def profile_data():
     save_runtime(runtime)
 
     return jsonify({"status": "ok"})
+
+@app.route("/api/submit_score", methods=["POST"])
+def submit_score():
+    data = request.get_json(silent=True) or {}
+
+    runtime = load_runtime()
+    scores = runtime.setdefault("scores", {})
+
+    level = data["level"]
+    order = data["order"]  # increasing or decreasing
+    player_amount = data["game_config"] # player count
+    name = data["name"] # player's name??
+    score = data["score"]
+    campaign = data["campaign"]
+
+    campaign_scores = scores.setdefault(campaign, {})
+    level_scores = campaign_scores.setdefault(level, {})
+
+    # Store score type.
+    level_scores["score_type"] = data["score_type"]
+
+    leaderboard = level_scores.setdefault(player_amount, [])
+
+    # Whether a smaller score is better.
+    lower_is_better = (order == "decreasing")
+
+    # Look for an existing score from this player.
+    for i, (old_score, old_name) in enumerate(leaderboard):
+        if old_name == name:
+            better = (
+                score < old_score
+                if lower_is_better
+                else score > old_score
+            )
+
+            if better:
+                leaderboard[i] = (score, name)
+
+            break
+    else:
+        # Player not found.
+        leaderboard.append((score, name))
+
+    # Sort leaderboard.
+    leaderboard.sort(
+        key=lambda x: x[0],
+        reverse=not lower_is_better
+    )
+
+    save_runtime(runtime)
+
+    return jsonify({
+        "total": len(leaderboard),
+        "tops": leaderboard[:10],
+        "link": "https://bombsquda.tailc76b25.ts.net/scores_lb",
+    })
         
 
 @app.route("/friends/messages", methods=["POST"])
