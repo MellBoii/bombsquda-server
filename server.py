@@ -635,11 +635,6 @@ def submit():
     save_data(data)
     return jsonify({"status": "ok"})
 
-@app.route("/get/<level>")
-def get_level(level):
-    data = load_data()
-    return jsonify(data.get(level, {}))
-
 @app.route("/api/get_scores")
 def get_scores():
     runtime = load_runtime()
