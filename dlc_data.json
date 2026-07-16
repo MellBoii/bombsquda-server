@@ -1,0 +1,16 @@
+{
+	"testing": {
+		"textures": {
+			"picture": "picture.dds"
+		},
+		"meshes": {
+			"testmesh": "boomBox.bob"
+		},
+		"audio": {
+			"imquestioningmysanity": "proposing to asepriterico while playing bombsquad.ogg"
+		},
+		"persistent": false
+	},
+	"info": "Persistent determines whether the file should stick with the user (really necessaary files), or if it should go away after a restart",
+	"info2": "Everything else should be self explanatory  You know how to read right"
+}

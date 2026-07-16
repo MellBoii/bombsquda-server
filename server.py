@@ -1,3 +1,4 @@
+
 from flask import (
     Flask, 
     request, 
@@ -9,30 +10,33 @@ from flask import (
     render_template,
     redirect,
     url_for,
-    session
+    session,
+    send_file
 )
 from werkzeug.security import (
     generate_password_hash, 
     check_password_hash
 )
 import json
+import json_repair
 import os, sys
 import time, datetime
 from dotenv import load_dotenv
+from pathlib import Path
 load_dotenv()
 
 app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 
-DATA_FILE = "leaderboard.json"
 port = int(os.environ.get("PORT", 5000))
 ONLINE_TIMEOUT = 10
+# FIXME: PLEAAASEEE FIX RUNTIME BUGGING
 RUNTIME_FILE = "runtime.json"
 
 def resolve_user_id(name: str) -> str | None:
     """Resolve a username/account name/ID into a Squda ID."""
     
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     info = runtime.get("user_info", {})
 
     name = clean_display_name(name)
@@ -60,14 +64,19 @@ def are_friends(runtime: dict, user1: str, user2: str) -> bool:
     
     return user2 in runtime.get("friends", {}).get(user1, [])
 
-def load_data():
-    if not os.path.exists(DATA_FILE):
+
+def load_data(file):
+    if not os.path.exists(file):
         return {}
-    with open(DATA_FILE, "r") as f:
+    with open(file, "r") as f:
         return json.load(f)
 
-def save_data(data):
-    with open(DATA_FILE, "w") as f:
+def save_data(data, file):
+    # use json_repair just to make sure
+    # we have no malformed json >:/
+    data = str(data)
+    data = json_repair.loads(data)
+    with open(file, "w") as f:
         json.dump(data, f, indent=4)
 
 def cleanup_offline_clients(runtime):
@@ -102,27 +111,6 @@ def index():
 @app.route("/bot")
 def bot():
     return send_from_directory(".", "bot.html")
-    
-
-def load_runtime():
-    if not os.path.exists(RUNTIME_FILE):
-        return {}
-
-    try:
-        with open(RUNTIME_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-
-    except json.JSONDecodeError as exc:
-        print(f"ERROR: Your runtime.json is malformed.\n{exc}")
-        raise
-        
-def save_runtime(data):
-    temp = RUNTIME_FILE + ".tmp"
-
-    with open(temp, "w", encoding="utf-8") as f:
-        json.dump(data, f, indent=2)
-
-    os.replace(temp, RUNTIME_FILE)
 
 @app.route("/about")
 def about():
@@ -132,7 +120,7 @@ def about():
 def login():
     error = None
     username = ""
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     correct_user = None
     correct_pass = None
 
@@ -179,7 +167,7 @@ def login():
 
 @app.route("/online", methods=["GET"])
 def get_online_players():
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     cleanup_offline_clients(runtime)
     save_runtime(runtime)
 
@@ -187,7 +175,7 @@ def get_online_players():
 
 @app.route("/acc_settings")
 def acc_settings():
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     squda_id = session.get('squda_id')
     # ew
     runtime_info = runtime.get('user_info', {})
@@ -207,7 +195,7 @@ def acc_settings():
 @app.route("/ping", methods=["POST"])
 def ping():
     data = request.json
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     reply = {"ok": True}
     runtime.setdefault('user_info', {})
     bs_id = data.get("bs_id")
@@ -256,7 +244,7 @@ def sendcur():
     data = request.json
     subkey = data.get('type', 'tickets')
     key = f"saved_{subkey}"
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     bs_id = data["bs_id"]
     runtime.setdefault(key, {})
     runtime[key][bs_id] = runtime[key].get(bs_id, 0) + data.get('amount')
@@ -275,7 +263,7 @@ def withdrawcur():
     data = request.json
     subkey = data.get('type', 'tickets')
     key = f"saved_{subkey}"
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     bs_id = data["bs_id"]
     runtime.setdefault(key, {})
     runtime[key][bs_id] = runtime[key].get(bs_id, 0) - data.get('amount')
@@ -294,7 +282,7 @@ def getcur():
     data = request.json
     subkey = data.get('type', 'tickets')
     key = f"saved_{subkey}"
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     bs_id = data["bs_id"]
     runtime.setdefault(key, {})
     save_runtime(runtime)
@@ -319,7 +307,7 @@ def send_friend_request():
     if sender == target:
         return jsonify({"error": "cannot_friend_self"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     runtime.setdefault("friend_requests", {})
     runtime.setdefault("friends", {})
@@ -352,7 +340,7 @@ def remove_friend():
     if user == target:
         return jsonify({"error": "cannot_friend_self"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     runtime.setdefault("friends", {})
 
@@ -388,7 +376,7 @@ def respond_friend_request():
     if not user or not sender:
         return jsonify({"error": "invalid_user"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     requests = runtime.setdefault("friend_requests", {})
     friends = runtime.setdefault("friends", {})
@@ -439,7 +427,7 @@ def send_friend_message():
     if len(message) > 80:
         message = message[:80]
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     # Must be friends
     if not are_friends(runtime, sender, target):
@@ -469,7 +457,7 @@ def profile_data():
 
     user_id = resolve_user_id(data.get('user'))
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     info = runtime.setdefault("user_info", {})
     thisinfo = info.setdefault(user_id, {})
@@ -490,7 +478,7 @@ def profile_data():
 def submit_score():
     data = request.get_json(silent=True) or {}
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     scores = runtime.setdefault("scores", {})
 
     level = data["level"]
@@ -553,7 +541,7 @@ def get_friend_messages():
     if not user1 or not user2:
         return jsonify({"error": "invalid_user"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     convo_id = "_".join(sorted([user1, user2]))
 
@@ -571,7 +559,7 @@ def set_seen():
     if not user1 or not user2:
         return jsonify({"error": "invalid_user"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     convo_id = "_".join(sorted([user1, user2]))
     for message in runtime.get("friend_messages", {}).get(convo_id, []):
@@ -590,7 +578,7 @@ def get_friends():
     if not user:
         return jsonify({"error": "invalid_user"})
 
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     return jsonify({
         "friends": runtime.get("friends", {}).get(user, []),
@@ -601,7 +589,7 @@ def get_friends():
 def get_info():
     data = request.get_json(silent=True) or {}
     id = data.get('id')
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     info = runtime.get("user_info", {})
     thisinfo = info.get(id, {})
     return jsonify(thisinfo)
@@ -610,7 +598,7 @@ def get_info():
 def get_status():
     data = request.get_json(silent=True) or {}
     id = data.get('id')
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
     info = runtime.get("client_statuses", {})
     thisinfo = info.get(id, {})
     return jsonify(thisinfo)
@@ -623,7 +611,7 @@ def submit():
     player = payload["player"]
     time = payload["time"]
 
-    data = load_data()
+    data = load_data('leaderboard.json')
 
     if level not in data:
         data[level] = {}
@@ -632,14 +620,86 @@ def submit():
     if best is None or time < best:
         data[level][player] = time
 
-    save_data(data)
+    save_data(data, 'leaderboard.json')
     return jsonify({"status": "ok"})
+    
+
 
 @app.route("/api/get_scores")
 def get_scores():
-    runtime = load_runtime()
+    runtime = load_data(RUNTIME_FILE)
 
     return jsonify(runtime.get('scores', {}))
+
+# ok so dumbasses dlc isnt just for paid stuff
+# it's called 'Downloadable Content' for a REASON
+# i mostly just made this to test myself
+@app.route('/api/get_dlc', methods=["POST"])
+def get_dlc():
+    payload = request.get_json() or {}
+    if not payload:
+        return jsonify({'error': 'no_payload'})
+    requested_name = payload.get('name')
+    # dlcs,,,,
+    available_dlc = load_data('dlc_data.json')
+    # file suffixes for bombsquad
+    file_suffixes = {
+        'meshes': 'bob',
+        'textures': 'dds',
+        'audio': 'ogg',
+        'python': 'py', # FIXME: are we really gonna include scripts as dlc???
+    }
+    # file converters (make later)
+    file_conversions = {}
+    data = available_dlc.get(requested_name)
+    if not data:
+        return jsonify({'error': 'invalid_dlc'})
+    # get the required files that the dlc wants to share
+    req_texs = data.get('textures')
+    req_mesh = data.get('meshes')
+    req_audio = data.get('audio')
+    persistent = data.get('persistent', False)
+    # url generator
+    def gen_files(file_dict: dict, keyname: str):
+        nonlocal file_suffixes
+        files = {}
+        if not file_dict:
+            return {}
+        for name, file in file_dict.items():
+            file = Path(file)
+            if file_suffixes.get(keyname) != file.suffix.lstrip('.'):
+                if file_conversions.get(keyname):
+                    print(f'GOT A UNCONVERTED FILE ({file.name}, for {keyname}) WHILE TRANSFERRING DLC; CONVERTING...')
+                    func = file_conversions.get(keyname)
+                    result = func(file)
+                else:
+                    print(f'GOT A UNCONVERTED FILE ({file.name}, for {keyname}) WHILE TRANSFERRING DLC AND HAVE NO CONVERTER; THIS MAY FAIL!!')
+                    result = file
+            else:
+                result = file
+            url = url_for(
+                'dlc_file',
+                filename=str(result),
+                _external=True
+            )
+            files[name] = url
+        return files
+    # generate urls from required files
+    result_texs = gen_files(req_texs, 'textures')
+    result_mesh = gen_files(req_mesh, 'meshes')
+    result_audio = gen_files(req_audio, 'audio')
+    # we return the end result urls,
+    # and then rely on the client downloading them
+    return jsonify({
+        'audio': result_audio,
+        'meshes': result_mesh,
+        'textures': result_texs,
+        'persistent': persistent,
+    })
+
+@app.route('/dlc/<path:filename>')
+def dlc_file(filename):
+    return send_file(f'dlc_files/{filename}')
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=port)
